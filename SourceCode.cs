@@ -19,9 +19,22 @@ namespace SkinTray
             _trayIcon = new NotifyIcon();
         }
 
-        // Reload the plugin (this is called when the skin is loaded or reloaded)
-        public void Reload(API api, ref double maxValue)
+        // Dispose the tray icon when the measure is finalized
+        public void Dispose()
         {
+            if (_trayIcon != null)
+            {
+                _trayIcon.Visible = false;  // Hide the icon from the tray
+                _trayIcon.Dispose();       // Dispose of the icon
+                _trayIcon = null;
+            }
+        }
+
+        public void Reload(API api, ref double maxValue) 
+        {
+            // Clean up the old tray icon before reloading
+            Dispose();
+
             _api = api;
 
             // Get the settings from Rainmeter config file
@@ -31,33 +44,25 @@ namespace SkinTray
             _rightClickAction = _api.ReadString("RightMouseUpAction", "");
 
             // Initialize the tray icon
-            _trayIcon.Icon = new System.Drawing.Icon(_iconPath);  // Set the tray icon
-            _trayIcon.Visible = true;
-            _trayIcon.Text = _toolTipText;  // Tooltip when hovering the tray icon
+            _trayIcon = new NotifyIcon
+            {
+                Icon = new System.Drawing.Icon(_iconPath),  // Set the tray icon
+                Visible = true,
+                Text = _toolTipText                         // Tooltip when hovering the tray icon
+            };
 
             // Define the actions for left and right mouse clicks
             _trayIcon.MouseClick += (sender, args) =>
             {
-                if (args.Button == MouseButtons.Left)
+                if (args.Button == MouseButtons.Left && !string.IsNullOrEmpty(_leftClickAction))
                 {
-                    if (!string.IsNullOrEmpty(_leftClickAction))
-                    {
-                        _api.Execute(_leftClickAction);  // Execute the left click action
-                    }
+                    _api.Execute(_leftClickAction);  // Execute the left click action
                 }
-                else if (args.Button == MouseButtons.Right)
+                else if (args.Button == MouseButtons.Right && !string.IsNullOrEmpty(_rightClickAction))
                 {
-                    if (!string.IsNullOrEmpty(_rightClickAction))
-                    {
-                        _api.Execute(_rightClickAction);  // Execute the right click action
-                    }
+                    _api.Execute(_rightClickAction);  // Execute the right click action
                 }
             };
-
-            // Optionally, add a context menu to the tray icon (if you want right-click options)
-            var contextMenu = new ContextMenuStrip();
-            contextMenu.Items.Add("Show ToolTip", null, (sender, e) => MessageBox.Show(_toolTipText));
-            _trayIcon.ContextMenuStrip = contextMenu;
         }
 
         // Update method (called periodically to refresh the skin)
@@ -76,10 +81,12 @@ namespace SkinTray
             data = GCHandle.ToIntPtr(GCHandle.Alloc(new Measure()));
         }
 
-        // Finalize the plugin
+        // Finalize the plugin (clean up resources)
         [DllExport]
         public static void Finalize(IntPtr data)
         {
+            Measure measure = (Measure)GCHandle.FromIntPtr(data).Target;
+            measure.Dispose();  // Dispose of the tray icon properly
             GCHandle.FromIntPtr(data).Free();
         }
 
