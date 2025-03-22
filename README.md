@@ -1,86 +1,149 @@
-# Rainmeter Tray Icon Plugin
+# SkinTray
 
-A simple Rainmeter plugin written in C# to display a tray icon in the system tray with customizable actions and tooltips. This plugin allows users to add a tray icon to their Rainmeter skins and interact with it using left and right mouse buttons.
+**SkinTray** is a Rainmeter plugin written in C# that creates a customizable system tray icon with dynamic features. It supports various mouse events including left, right, middle clicks, double-clicks, and mouse wheel actions. Additionally, it offers a dark mode for the context menu when configured, making it an ideal choice for users who want a feature-rich and modern tray icon experience in Rainmeter.
 
 ## Features
 
-- Displays a tray icon in the system tray.
-- Customizable icon, tooltip, and click actions (left and right mouse clicks).
-- Supports both left and right click actions configured in Rainmeter.
-- Built using C# and .NET Framework.
+- **Dynamic Icon Updates:** Change the tray icon on the fly without causing flickering.
+- **Multiple Mouse Actions:** 
+  - Left, Right, and Middle mouse clicks.
+  - Double-click events.
+  - Mouse wheel actions (scroll up and down).
+- **Custom Context Menus:** 
+  - Supports dynamic menu creation.
+  - Option to render the context menu in dark mode using a custom renderer.
+- **Error Handling:** Logs helpful messages when configuration issues occur (e.g., missing icon file).
+- **Seamless Integration:** Works smoothly within the Rainmeter environment.
 
-## Installation
+## Configuration
 
-### Prerequisites
+SkinTray is configured through Rainmeter skin settings. Below is an example configuration snippet:
 
-- **Rainmeter** (v4.0 or later)
-- **.NET Framework** (v4.8 or later) installed on your system.
+```ini
+[Rainmeter]
+Update=1000
+AccurateText=1
+DynamicWindowSize=1
 
-### Steps
+[Metadata]
+Name=SkinTray
+Author=NS Tech Bytes
+Information=This skin tests the Tray Icon Plugin with various mouse actions.
+License=MIT License
 
-1. **Clone this repository**:
+[Variables]
+Action=Perform Action in Tray Icon
 
-   ```bash
-   git clone https://github.com/yourusername/RainmeterTrayIconPlugin.git
-   ```
-2. **Build the Plugin**:
+[Calc]
+Measure=Calc
+Formula=Calc = 0 ? 1 : 0
 
-   - Open the project in **Visual Studio**.
-   - Set the target framework to **.NET Framework 4.8**.
-   - Build the solution to generate the `SkinTray.dll`.
-3. **Copy the Plugin DLL**:
+[MeasureTrayIcon]
+Measure=Plugin
+Plugin=SkinTray
+Disabled=0
+Icon="#@#Icon[Calc].ico"
+ToolTipText=Tray Icon [Calc]
+;Dark or White Context Menu (optional)
+DarkContext=0
+; Mouse click actions
+LeftMouseUpAction=[!Log "Left Mouse Action"][!SetVariable Action  "Left Mouse Action"][!UpdateMeter *][!Redraw]
+RightMouseUpAction=[!Log "Right Mouse Action"][!SetVariable Action  "Right Mouse Action"][!UpdateMeter *][!Redraw]
+MiddleMouseUpAction=[!Log "MiddleMouseUpAction"][!SetVariable Action  "MiddleMouseUpAction"][!UpdateMeter *][!Redraw]
+DoubleClickAction=[!Log "Double Click Action"][!SetVariable Action  "Double Click Action"][!UpdateMeter *][!Redraw]
+; Mouse wheel actions
+MouseWheelUpAction=[!Log "Mouse ScrollUp"][!SetVariable Action  "Mouse ScrollUp"][!UpdateMeter *][!Redraw]
+MouseWheelDownAction=[!Log "Mouse Scrolldown"][!SetVariable Action  "Mouse Scrolldown"][!UpdateMeter *][!Redraw]
+; Context menu configuration (optional)
+ContextMenuItemCount=2
+ContextMenuItem1=Action One
+ContextMenuAction1=[!Log "Context Menu Action One"][!SetVariable Action  "Context Menu Action One"][!UpdateMeter *][!Redraw]
+ContextMenuItem2=Action Two
+ContextMenuAction2=[!Log "Context Menu Action Two"][!SetVariable Action  "Context Menu Action Two"][!UpdateMeter *][!Redraw]
+DynamicVariables=1
 
-   - Place the compiled `SkinTray.dll` in your Rainmeter plugins folder. Typically, the folder is located at:
+[MeterString]
+Meter=String
+Text=#Action#
+X=100
+Y=50
+H=100
+W=200
+StringAlign=CenterCenter
+SolidColor=11f1ab
+AntiAlias=1
+DynamicVariables=1
+
+```
+
+### Configuration Table
+
+| Key                     | Description                                                      | Default Value             |
+|-------------------------|------------------------------------------------------------------|---------------------------|
+| `Icon`                  | Path to the tray icon file.                                      | `""` (empty)              |
+| `ToolTipText`           | Tooltip text for the tray icon.                                  | `"Tray Icon Plugin"`      |
+| `LeftMouseUpAction`     | Action executed on left mouse button click.                      | `""` (empty)              |
+| `RightMouseUpAction`    | Action executed on right mouse button click.                     | `""` (empty)              |
+| `MiddleMouseUpAction`   | Action executed on middle mouse button click.                    | `""` (empty)              |
+| `DoubleClickAction`     | Action executed on a double click.                               | `""` (empty)              |
+| `MouseWheelUpAction`    | Action executed when the mouse wheel scrolls up.                 | `""` (empty)              |
+| `MouseWheelDownAction`  | Action executed when the mouse wheel scrolls down.               | `""` (empty)              |
+| `ContextMenuItemCount`  | Number of context menu items to create.                          | `0`                       |
+| `ContextMenuItemX`      | Text for the Xth context menu item (replace X with the item number). | `""` (empty)              |
+| `ContextMenuActionX`    | Action for the Xth context menu item.                            | `""` (empty)              |
+| `DarkContext`           | If set to 1, displays the context menu in dark mode.             | `0`                       |
+
+## Building the Plugin
+
+To build the **SkinTray** plugin:
+
+1. **Prerequisites:**
+   - Visual Studio (2017 or later recommended)
+   - .NET Framework (compatible version used by Rainmeter, typically 4.x)
+   - Windows Forms libraries
+
+2. **Steps:**
+   - Open the solution file in Visual Studio.
+   - Ensure that your project is targeting the correct .NET Framework.
+   - Build the project to generate `SkinTray.dll`.
+
+3. **Installation:**
+   - Copy `SkinTray.dll` into Rainmeter's plugin folder, typically:
      ```
-     C:\Program Files\Rainmeter\Plugins\
+     C:\Users\<YourUsername>\Documents\Rainmeter\Plugins\
      ```
-4. **Set up Your Rainmeter Skin**:
+   - Refresh or reload your Rainmeter skin to load the new plugin.
 
-   - Create or modify a skin and add the following code to a `.ini` file:
-     ```ini
-     [Rainmeter]
-     Update=1000
-     AccurateText=1
+## Usage
 
-     [MeasureTray]
-     Measure=Plugin
-     Plugin=SkinTray
-     Icon=#@#icon.ico
-     ToolTipText=TrayIcon Example
-     LeftMouseUpAction=[!ToggleFade]
-     RightMouseUpAction=[!SkinMenu]
-     ```
-   - Ensure your icon is placed in the skin's `@Resources` folder (or the specified directory).
-5. **Reload the Skin**:
+After installation and configuration:
 
-   - Right-click the Rainmeter icon in the system tray and click **Refresh All** or **Reload** the skin.
+- The tray icon will appear in the system tray.
+- Use the defined mouse actions (left, right, middle, double-click, mouse wheel) to trigger actions as specified in your Rainmeter configuration.
+- Right-clicking (or using your configured mouse actions) will open the context menu, which can appear in dark mode if `DarkContext` is set to `1`.
 
-## Configuration Options
+## Troubleshooting
 
-- **IconName**: The path to the icon file (supports `.ico` format).
-
-  - Example: `IconName=#@#icon.ico` (for an icon inside the `@Resources` folder).
-- **ToolTipText**: The text that appears when you hover over the tray icon.
-- **LeftMouseUpAction**: Action triggered when the user left-clicks on the tray icon.
-
-  - Example: `LeftMouseUpAction=[!ToggleFade]`
-- **RightMouseUpAction**: Action triggered when the user right-clicks on the tray icon.
-
-  - Example: `RightMouseUpAction=[!SkinMenu]`
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- **Icon Flickering:**  
+  If you experience flickering when changing the icon dynamically, ensure that only the icon property is updated rather than recreating the entire NotifyIcon object.
+  
+- **Configuration Issues:**  
+  Make sure all paths and actions are correctly set in your Rainmeter config. Check the Rainmeter log for detailed error messages.
 
 ## Contributing
 
-Feel free to fork this repository and create pull requests for improvements or bug fixes. Any contributions are welcome!
+Contributions are welcome! Feel free to fork the repository and submit pull requests if you have improvements or fixes.
 
-## Acknowledgements
+## License
 
-- [Rainmeter](https://www.rainmeter.net/) - For being an amazing desktop customization tool.
-- [.NET Framework](https://dotnet.microsoft.com/en-us/) - For enabling easy Windows development.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Issues
+## Author
 
-If you encounter any issues or have any questions, please feel free to open an issue.
+**nstechbytes**
+
+For any issues, suggestions, or feedback, please open an issue or contact me directly.
+
+---
+
+*Happy skinning with Rainmeter!*
