@@ -29,21 +29,142 @@ namespace SkinTray
         public DarkToolStripRenderer() : base(new DarkColorTable()) { }
     }
 
-    // Custom NativeWindow to intercept WM_MOUSEWHEEL events
-    public class TrayIconNativeWindow : NativeWindow
+    // Low-level mouse hook for capturing mouse wheel events over tray icon
+    public class MouseHook
     {
-        public event MouseEventHandler MouseWheelEvent;
+        private const int WH_MOUSE_LL = 14;
+        private const int WM_MOUSEWHEEL = 0x020A;
 
-        protected override void WndProc(ref Message m)
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+        private LowLevelMouseProc _proc;
+        private IntPtr _hookID = IntPtr.Zero;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("shell32.dll", SetLastError = true)]
+        private static extern int Shell_NotifyIconGetRect([In] ref NOTIFYICONIDENTIFIER identifier, [Out] out RECT iconLocation);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
         {
-            const int WM_MOUSEWHEEL = 0x020A;
-            if (m.Msg == WM_MOUSEWHEEL)
+            public int x;
+            public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public POINT pt;
+            public uint mouseData;
+            public uint flags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int left;
+            public int top;
+            public int right;
+            public int bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NOTIFYICONIDENTIFIER
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public uint uID;
+            public Guid guidItem;
+        }
+
+        public event EventHandler<int> MouseWheel;
+        private IntPtr _trayWindowHandle;
+        private uint _trayIconID;
+        private API _api;
+
+        public MouseHook(IntPtr trayWindowHandle, uint trayIconID, API api)
+        {
+            _trayWindowHandle = trayWindowHandle;
+            _trayIconID = trayIconID;
+            _api = api;
+            _proc = HookCallback;
+        }
+
+        public void Install()
+        {
+            if (_hookID == IntPtr.Zero)
             {
-                int delta = (short)((int)m.WParam >> 16);
-                MouseEventArgs args = new MouseEventArgs(MouseButtons.None, 0, 0, 0, delta);
-                MouseWheelEvent?.Invoke(this, args);
+                using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
+                using (var curModule = curProcess.MainModule)
+                {
+                    _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                    if (_hookID == IntPtr.Zero && _api != null)
+                    {
+                        int error = Marshal.GetLastWin32Error();
+                        _api.Log(API.LogType.Error, $"Failed to install mouse hook. Error code: {error}");
+                    }
+                }
             }
-            base.WndProc(ref m);
+        }
+
+        public void Uninstall()
+        {
+            if (_hookID != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookID);
+                _hookID = IntPtr.Zero;
+            }
+        }
+
+        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0 && wParam == (IntPtr)WM_MOUSEWHEEL)
+            {
+                try
+                {
+                    MSLLHOOKSTRUCT hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+
+                    // Check if mouse is over tray icon
+                    NOTIFYICONIDENTIFIER nii = new NOTIFYICONIDENTIFIER
+                    {
+                        cbSize = Marshal.SizeOf(typeof(NOTIFYICONIDENTIFIER)),
+                        hWnd = _trayWindowHandle,
+                        uID = _trayIconID,
+                        guidItem = Guid.Empty
+                    };
+
+                    RECT rect;
+                    int result = Shell_NotifyIconGetRect(ref nii, out rect);
+                    if (result == 0) // S_OK
+                    {
+                        if (hookStruct.pt.x >= rect.left && hookStruct.pt.x <= rect.right &&
+                            hookStruct.pt.y >= rect.top && hookStruct.pt.y <= rect.bottom)
+                        {
+                            short delta = (short)((hookStruct.mouseData >> 16) & 0xFFFF);
+                            MouseWheel?.Invoke(this, delta);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (_api != null)
+                        _api.Log(API.LogType.Error, $"Error in mouse hook callback: {ex.Message}");
+                }
+            }
+            return CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
     }
 
@@ -51,7 +172,7 @@ namespace SkinTray
     {
         private API _api;
         private NotifyIcon _trayIcon;
-        private TrayIconNativeWindow _nativeWindow; // For WM_MOUSEWHEEL events
+        private MouseHook _mouseHook; // For WM_MOUSEWHEEL events
         private string _iconPath;
         private string _toolTipText;
         private string _leftClickAction;
@@ -71,13 +192,13 @@ namespace SkinTray
             };
         }
 
-        // Dispose only the native window and the icon, but keep the tray icon if possible
+        // Dispose the mouse hook and the tray icon
         public void Dispose()
         {
-            if (_nativeWindow != null)
+            if (_mouseHook != null)
             {
-                _nativeWindow.ReleaseHandle();
-                _nativeWindow = null;
+                _mouseHook.Uninstall();
+                _mouseHook = null;
             }
             if (_trayIcon != null)
             {
@@ -98,7 +219,6 @@ namespace SkinTray
             int disabled = _api.ReadInt("Disabled", 0);
             if (disabled == 1)
             {
-                API.Log(0, "Tray icon is disabled via configuration. No icon will be shown.");
                 if (_trayIcon != null)
                 {
                     _trayIcon.Visible = false;
@@ -142,7 +262,7 @@ namespace SkinTray
                 }
                 catch (Exception ex)
                 {
-                    API.Log(1, $"Error loading icon from path '{_iconPath}': {ex.Message}");
+                    _api.Log(API.LogType.Error, $"Error loading icon from path '{_iconPath}': {ex.Message}");
                     // Optionally, set a default icon here.
                 }
             }
@@ -188,22 +308,22 @@ namespace SkinTray
             // Attach or update mouse event handlers (only attach once)
             AttachMouseEventHandlers();
 
-            // Hook into the underlying native window of the tray icon for WM_MOUSEWHEEL events (only attach once)
-            AttachNativeWindow();
+            // Install low-level mouse hook for mouse wheel events (only attach once)
+            InstallMouseHook();
         }
 
         // Attach mouse event handlers if not already attached
         private void AttachMouseEventHandlers()
         {
             // Avoid attaching multiple times
-            _trayIcon.MouseClick -= TrayIcon_MouseClick;
+            _trayIcon.MouseUp -= TrayIcon_MouseUp;
             _trayIcon.MouseDoubleClick -= TrayIcon_MouseDoubleClick;
 
-            _trayIcon.MouseClick += TrayIcon_MouseClick;
+            _trayIcon.MouseUp += TrayIcon_MouseUp;
             _trayIcon.MouseDoubleClick += TrayIcon_MouseDoubleClick;
         }
 
-        private void TrayIcon_MouseClick(object sender, MouseEventArgs args)
+        private void TrayIcon_MouseUp(object sender, MouseEventArgs args)
         {
             if (args.Button == MouseButtons.Left && !string.IsNullOrEmpty(_leftClickAction))
             {
@@ -213,8 +333,10 @@ namespace SkinTray
             {
                 _api.Execute(_middleClickAction);
             }
-            else if (args.Button == MouseButtons.Right && _trayIcon.ContextMenuStrip == null && !string.IsNullOrEmpty(_rightClickAction))
+            else if (args.Button == MouseButtons.Right && !string.IsNullOrEmpty(_rightClickAction))
             {
+                // Execute right-click action regardless of context menu presence
+                // The context menu will still show if defined (handled by NotifyIcon)
                 _api.Execute(_rightClickAction);
             }
         }
@@ -227,39 +349,40 @@ namespace SkinTray
             }
         }
 
-        // Attach native window for mouse wheel events if not already attached
-        private void AttachNativeWindow()
+        // Install low-level mouse hook for mouse wheel events if not already installed
+        private void InstallMouseHook()
         {
-            if (_nativeWindow != null)
+            if (_mouseHook != null)
                 return;
 
             try
             {
+                // Get the window handle from the NotifyIcon
                 FieldInfo windowField = typeof(NotifyIcon).GetField("window", BindingFlags.Instance | BindingFlags.NonPublic);
                 if (windowField != null)
                 {
                     NativeWindow window = windowField.GetValue(_trayIcon) as NativeWindow;
-                    if (window != null)
+                    if (window != null && window.Handle != IntPtr.Zero)
                     {
-                        _nativeWindow = new TrayIconNativeWindow();
-                        _nativeWindow.AssignHandle(window.Handle);
-                        _nativeWindow.MouseWheelEvent += (sender, e) =>
+                        _mouseHook = new MouseHook(window.Handle, 1, _api);
+                        _mouseHook.MouseWheel += (sender, delta) =>
                         {
-                            if (e.Delta > 0 && !string.IsNullOrEmpty(_mouseWheelUpAction))
+                            if (delta > 0 && !string.IsNullOrEmpty(_mouseWheelUpAction))
                             {
                                 _api.Execute(_mouseWheelUpAction);
                             }
-                            else if (e.Delta < 0 && !string.IsNullOrEmpty(_mouseWheelDownAction))
+                            else if (delta < 0 && !string.IsNullOrEmpty(_mouseWheelDownAction))
                             {
                                 _api.Execute(_mouseWheelDownAction);
                             }
                         };
+                        _mouseHook.Install();
                     }
                 }
             }
             catch (Exception ex)
             {
-                API.Log(1, $"Error attaching to tray icon native window for mouse wheel events: {ex.Message}");
+                _api.Log(API.LogType.Error, $"Error installing mouse hook for mouse wheel events: {ex.Message}");
             }
         }
 
