@@ -1,0 +1,21 @@
+﻿{
+    "skinDir":  ".\\Resources\\Skins",
+    "version":  "1.3.0",
+    "minimumVersion":  "4.5",
+    "author":  "nstechbytes",
+    "variableFiles":  "",
+    "minimumWindows":  "5.1",
+    "plugins":  [
+                    {
+                        "x64":  ".\\dist\\x64",
+                        "x32":  ".\\dist\\x32",
+                        "name":  "SkinTray.dll"
+                    }
+                ],
+    "name":  "SkinTray",
+    "loadType":  "Skin",
+    "load":  "SkinTray\\SkinTray.ini",
+    "headerImage":  ".\\Resources\\banner.bmp",
+    "configPrefix":  "SkinTray",
+    "output":  ".\\dist\\SkinTray_v1.3.0.rmskin"
+}
