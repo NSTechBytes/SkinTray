@@ -14,7 +14,7 @@
                 ],
     "name":  "SkinTray",
     "loadType":  "Skin",
-    "load":  "SkinTray\\SkinTray.ini",
+    "load":  "SkinTray\\Main.ini",
     "headerImage":  ".\\Resources\\banner.bmp",
     "configPrefix":  "SkinTray",
     "output":  ".\\dist\\SkinTray_v1.3.0.rmskin"
